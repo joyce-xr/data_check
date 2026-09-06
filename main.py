@@ -5,6 +5,7 @@ import os
 import random
 import re
 import sys
+from datetime import datetime, timedelta
 import time
 from urllib.parse import urlparse
 
@@ -72,7 +73,15 @@ def _print_request(resp: requests.Response) -> None:
         print(body)
     print("=" * 60)
 
-def search_not_finished(base_url: str, key: str, method: str = "POST", params: dict | None = None, json_body: dict | None = None, fuc_name: str = "") -> dict:
+
+def search_not_finished(
+    base_url: str,
+    key: str,
+    method: str = "POST",
+    params: dict | None = None,
+    json_body: dict | None = None,
+    fuc_name: str = "",
+) -> dict:
     """调用接口并返回 JSON 响应。base_url 与 key 来自 api_accounts.py 中的某个账号。"""
 
     try:
@@ -91,7 +100,9 @@ def search_not_finished(base_url: str, key: str, method: str = "POST", params: d
     except requests.exceptions.Timeout:
         raise RuntimeError("请求超时，请检查网络或接口地址")
     except requests.exceptions.HTTPError as e:
-        raise RuntimeError(f"接口返回错误: {e.response.status_code} - {e.response.text[:200]}")
+        raise RuntimeError(
+            f"接口返回错误: {e.response.status_code} - {e.response.text[:200]}"
+        )
     except requests.exceptions.RequestException as e:
         raise RuntimeError(f"请求失败: {e}")
 
@@ -162,8 +173,14 @@ def export_result_to_excel(
     paths = []
     for org, items in groups.items():
         # 清理文件名非法字符及各类括号（沙箱与 Windows 兼容）
-        safe_org = re.sub(r"_+", "_", re.sub(r'[\\/:*?"<>|()（）]', "_", org)).strip("_")
-        name = f"{func_tag}_{safe_org}_{month}.xlsx" if group_field else f"{func_tag}_{month}.xlsx"
+        safe_org = re.sub(r"_+", "_", re.sub(r'[\\/:*?"<>|()（）]', "_", org)).strip(
+            "_"
+        )
+        name = (
+            f"{func_tag}_{safe_org}_{month}.xlsx"
+            if group_field
+            else f"{func_tag}_{month}.xlsx"
+        )
         path = os.path.join(save_dir, name)
         wb = Workbook()
         ws = wb.active
@@ -185,7 +202,7 @@ def run_account_tasks(base_url: str, key: str, result_dir: str) -> None:
         key=key,
         method="POST",
         fuc_name=fuc_name,
-        json_body={ # 只看待财务确认
+        json_body={  # 只看待财务确认
             "current": 1,
             "size": 200,
             "sort": "id",
@@ -196,9 +213,13 @@ def run_account_tasks(base_url: str, key: str, result_dir: str) -> None:
     # print("接口响应:", result)
     records = _extract_records(result)
     if records:
-        export_result_to_excel(result, fields=["purchOrganName", "orderDate", "orderNo"], fuc_name=fuc_name, group_field="purchOrganName", save_dir=result_dir)
-
-
+        export_result_to_excel(
+            result,
+            fields=["purchOrganName", "orderDate", "orderNo"],
+            fuc_name=fuc_name,
+            group_field="purchOrganName",
+            save_dir=result_dir,
+        )
 
     func_name2 = "/api/purch/back/page"  # 采购退货单查询
     result = search_not_finished(
@@ -206,7 +227,7 @@ def run_account_tasks(base_url: str, key: str, result_dir: str) -> None:
         key=key,
         method="POST",
         fuc_name=func_name2,
-        json_body={ # 只看已完结-未确认
+        json_body={  # 只看已完结-未确认
             "current": 1,
             "size": 200,
             "sort": "id",
@@ -217,15 +238,21 @@ def run_account_tasks(base_url: str, key: str, result_dir: str) -> None:
     # print("接口响应:", result)
     records = _extract_records(result)
     if records:
-        export_result_to_excel(result, fields=["purchOrganName", "orderDate", "orderNo"], fuc_name=func_name2, group_field="purchOrganName", save_dir=result_dir)
+        export_result_to_excel(
+            result,
+            fields=["purchOrganName", "orderDate", "orderNo"],
+            fuc_name=func_name2,
+            group_field="purchOrganName",
+            save_dir=result_dir,
+        )
 
-    func_name3="/api/sell/out/page"  # 销售出库单查询
+    func_name3 = "/api/sell/out/page"  # 销售出库单查询
     result = search_not_finished(
         base_url=base_url,
         key=key,
         method="POST",
         fuc_name=func_name3,
-        json_body={ # 只看待财务确认
+        json_body={  # 只看待财务确认
             "current": 1,
             "size": 200,
             "sort": "id",
@@ -236,15 +263,21 @@ def run_account_tasks(base_url: str, key: str, result_dir: str) -> None:
     # print("接口响应:", result)
     records = _extract_records(result)
     if records:
-        export_result_to_excel(result, fields=["sellOrganName", "orderDate", "orderNo"], fuc_name=func_name3, group_field="sellOrganName", save_dir=result_dir)
+        export_result_to_excel(
+            result,
+            fields=["sellOrganName", "orderDate", "orderNo"],
+            fuc_name=func_name3,
+            group_field="sellOrganName",
+            save_dir=result_dir,
+        )
 
-    func_name4="/api/sell/back/page"  # 销售退货单查询
+    func_name4 = "/api/sell/back/page"  # 销售退货单查询
     result = search_not_finished(
         base_url=base_url,
         key=key,
         method="POST",
         fuc_name=func_name4,
-        json_body={ # 只看已完结-未确认
+        json_body={  # 只看已完结-未确认
             "current": 1,
             "size": 200,
             "sort": "id",
@@ -255,17 +288,37 @@ def run_account_tasks(base_url: str, key: str, result_dir: str) -> None:
     # print("接口响应:", result)
     records = _extract_records(result)
     if records:
-        export_result_to_excel(result, fields=["sellOrganName", "orderDate", "orderNo"], fuc_name=func_name4, group_field="sellOrganName", save_dir=result_dir)
-
+        export_result_to_excel(
+            result,
+            fields=["sellOrganName", "orderDate", "orderNo"],
+            fuc_name=func_name4,
+            group_field="sellOrganName",
+            save_dir=result_dir,
+        )
 
     # 未下推的费用
-    func_name5="/api/ship/bill/settleOrganList"  # 分组列表
+    func_name5 = "/api/ship/bill/settleOrganList"  # 分组列表
     result = search_not_finished(
         base_url=base_url,
         key=key,
         method="POST",
         fuc_name=func_name5,
-        json_body={"current":1,"size":200,"sort":"id","order":"descending","model":{"settleOrganId":"","expUserId":"","companyId":"","createDateRang":None},"settleOrganId":"","expUserId":"","companyId":"","createDateRange":None},
+        json_body={
+            "current": 1,
+            "size": 200,
+            "sort": "id",
+            "order": "descending",
+            "model": {
+                "settleOrganId": "",
+                "expUserId": "",
+                "companyId": "",
+                "createDateRang": None,
+            },
+            "settleOrganId": "",
+            "expUserId": "",
+            "companyId": "",
+            "createDateRange": None,
+        },
     )
     # print("接口响应:", result)
     # 暂不导出：该接口返回按结算机构汇总的数据（可用字段：settleOrganName / settleName /
@@ -283,7 +336,16 @@ def run_account_tasks(base_url: str, key: str, result_dir: str) -> None:
     ]
     print(f"未下推费用分组: {len(fee_groups)} 组")
 
-    fee_fields = ["settleOrganName", "expUserId", "feeName", "companyId", "happenDate", "createTime", "linkBizOrderNo", "splitFlag"]
+    fee_fields = [
+        "settleOrganName",
+        "expUserId",
+        "feeName",
+        "companyId",
+        "happenDate",
+        "createTime",
+        "linkBizOrderNo",
+        "splitFlag",
+    ]
     fee_details = []
     for g in fee_groups:
         result = search_not_finished(
@@ -311,32 +373,146 @@ def run_account_tasks(base_url: str, key: str, result_dir: str) -> None:
         )
 
     # 未完结的费用报销单
-    func_name6="/api/finance/feeSubmit/page"
+    func_name6 = "/api/finance/feeSubmit/page"
     result = search_not_finished(
         base_url=base_url,
         key=key,
         method="POST",
         fuc_name=func_name6,
-        json_body={"current":1,"size":200,"sort":"id","order":"descending","model":{"statusList": ["000", "100"], "onlySelf": False}},
+        json_body={
+            "current": 1,
+            "size": 200,
+            "sort": "id",
+            "order": "descending",
+            "model": {"statusList": ["000", "100"], "onlySelf": False},
+        },
     )
     # print("接口响应:", result)
     records = _extract_records(result)
     if records:
-        export_result_to_excel(result, fields=["settleOrganName", "orderDate", "orderNo"], fuc_name=func_name6, group_field="settleOrganName", save_dir=result_dir)
+        export_result_to_excel(
+            result,
+            fields=["settleOrganName", "orderDate", "orderNo"],
+            fuc_name=func_name6,
+            group_field="settleOrganName",
+            save_dir=result_dir,
+        )
 
     # 未完结的费用支出单
-    func_name7="/api/finance/feePayout/page"
+    func_name7 = "/api/finance/feePayout/page"
     result = search_not_finished(
         base_url=base_url,
         key=key,
         method="POST",
         fuc_name=func_name7,
-        json_body={"current":1,"size":200,"sort":"id","order":"descending","model":{"statusList": ["000", "100"]}},
+        json_body={
+            "current": 1,
+            "size": 200,
+            "sort": "id",
+            "order": "descending",
+            "model": {"statusList": ["000", "100"]},
+        },
     )
     # print("接口响应:", result)
     records = _extract_records(result)
     if records:
-        export_result_to_excel(result, fields=["settleOrganName", "orderDate", "orderNo"], fuc_name=func_name7, group_field="settleOrganName", save_dir=result_dir)
+        export_result_to_excel(
+            result,
+            fields=["settleOrganName", "orderDate", "orderNo"],
+            fuc_name=func_name7,
+            group_field="settleOrganName",
+            save_dir=result_dir,
+        )
+
+    # 库存成本调整记录，是否存在没有改前成本价的记录
+    func_name8 = "/api/stock/change/task/page"
+    result = search_not_finished(
+        base_url=base_url,
+        key=key,
+        method="POST",
+        fuc_name=func_name8,
+        json_body={
+            "current": 1,
+            "size": 10,
+            "sort": "id",
+            "order": "descending",
+            "model": {
+                "createDateRange": {
+                    "startDate": "2026-08-01",
+                    "endDate": "2026-08-31",
+                    "type": 30,
+                }
+            },
+        },
+    )
+    # print("接口响应:", result)
+    records = _extract_records(result)
+    # 只导出未返回 beforePriceAmtReal 节点的记录
+    missing = [r for r in records if "beforePriceAmtReal" not in r]
+    if missing:
+        export_result_to_excel(
+            {"data": missing},
+            fields=["ownerOrganName", "createTime", "linkBizOrderNo", "goodCode"],
+            fuc_name=func_name8,
+            group_field="ownerOrganName",
+            save_dir=result_dir,
+        )
+
+def run_download_tasks(base_url: str, key: str, result_dir: str) -> None:
+    # 下载系统备份报表
+    func_name9 = "/api/common/export/page"
+
+    result = search_not_finished(
+        base_url=base_url,
+        key=key,
+        method="POST",
+        fuc_name=func_name9,
+        json_body={
+            "current": 1,
+            "size": 10,
+            "sort": "id",
+            "order": "descending",
+            "model": {},
+        },
+    )
+    records = _extract_records(result)
+    # 筛选：status=100 且 orderDate=今天（yyyy-mm-dd）
+    today = time.strftime("%Y-%m-%d")
+    download_list = [
+        r
+        for r in records
+        if str(r.get("status")) == "100" and str(r.get("orderDate", "")) == today
+    ]
+    download_dir = os.path.join(
+        r"D:\data_backup",
+        urlparse(base_url).hostname.split(".")[0],  # 二级域名，如 test
+    )
+    os.makedirs(download_dir, exist_ok=True)
+    saved, failed = 0, 0
+    for rec in download_list:
+        url = rec.get("ossPathUrl", "")
+        if not url:
+            continue
+        fname = (
+            os.path.basename(urlparse(url).path)
+            or f"backup_{rec.get('orderNo', 'unknown')}.zip"
+        )
+        fname = re.sub(r'[\\/:*?"<>|]', "_", fname)  # 清理 Windows 非法字符
+        fpath = os.path.join(download_dir, fname)
+        try:
+            dl_resp = requests.get(url, timeout=60)
+            dl_resp.raise_for_status()
+            with open(fpath, "wb") as f:
+                f.write(dl_resp.content)
+            print(f"已下载: {fpath}")
+            saved += 1
+        except requests.exceptions.RequestException as e:
+            print(f"下载失败 {url}: {e}")
+            failed += 1
+    if download_list:
+        print(
+            f"备份下载汇总: 成功 {saved}, 失败 {failed}, 今日筛选 {today} 共 {len(download_list)} 条"
+        )
 
 
 class _Tee:
@@ -369,6 +545,12 @@ def _setup_logger() -> str:
     return log_path
 
 
+# def is_last_day_of_month():
+#     today = datetime.now()
+#     tomorrow = today + timedelta(days=1)
+#     return tomorrow.day == 1  # 明天是1号，说明今天是月末
+
+
 def main():
     log_path = _setup_logger()
     print(f"日志文件: {log_path}")
@@ -386,10 +568,15 @@ def main():
         print(f"输出目录: {account_dir}")
         try:
             run_account_tasks(account["url"], account["key"], account_dir)
+            run_download_tasks(account["url"], account["key"], account_dir)
         except RuntimeError as e:
             # 单个账号失败不影响其他账号继续执行
             print(f"[{name}] 执行失败，已跳过: {e}")
 
 
 if __name__ == "__main__":
+    # if not is_last_day_of_month():
+    #     sys.exit(0)  # 不是月末，直接退出
+    # # ===== 下面放你真正要执行的代码 =====
+    # print("月末24点，开始执行...")
     main()
