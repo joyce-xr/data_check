@@ -4,12 +4,12 @@ from openpyxl import Workbook
 from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
 from openpyxl.utils import get_column_letter
 
-ATTACH_DIR = r'D:\粤之星对账\26-8\成都鑫联昇'
+ATTACH_DIR = r'D:\粤之星对账\26-8\福州国炬'
 BEFORE_INV = ATTACH_DIR + r'\7月-账面库存.xlsx'
 NOW_FLOW = ATTACH_DIR + r'\8月-出入库流水.xlsx'
 AFTER_INV = ATTACH_DIR + r'\8月-账面库存.xlsx'
 
-OUTPUT = r'D:\粤之星对账\26-8\成都鑫联昇\8月库存差异分析.xlsx'
+OUTPUT = r'D:\粤之星对账\26-8\福州国炬\8月库存差异分析.xlsx'
 
 GROUP_KEYS = ['商品编码', '库存类型', '仓库', '货主']
 NEG_PREFIXES = ['XSDD', 'CGTH', 'PKD', 'JSTH', 'DBCK', 'WTO', 'QTCK']

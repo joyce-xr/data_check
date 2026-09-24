@@ -1,8 +1,4 @@
-import base64
-import hashlib
-import json
 import os
-import random
 import re
 import sys
 from datetime import datetime, timedelta
@@ -12,47 +8,8 @@ from urllib.parse import urlparse
 import requests
 from openpyxl import Workbook
 
-from api_accounts import API_ACCOUNTS
-
-
-def _gen_nonce() -> str:
-    """请求头 N：13 位毫秒时间戳 + 7 位随机数字。"""
-    return str(int(time.time() * 1000)) + "".join(random.choices("0123456789", k=7))
-
-
-def _jwt_payload(token: str) -> dict:
-    """解码 JWT 载荷，取 blockId / userId 用于签名。"""
-    b64 = token.split(".")[1]
-    b64 += "=" * (-len(b64) % 4)
-    return json.loads(base64.urlsafe_b64decode(b64))
-
-
-def _gen_sign(nonce: str, token: str, path: str) -> str:
-    """请求头 S，复刻前端算法：
-    MD5(blockId + userId + path + token[time各位数字作索引] + token[倒序random各位数字作索引])
-    path 为去掉域名后的完整路径（含 /api 前缀）。
-    """
-    token = token.replace("Bearer ", "")
-    ts, rnd = nonce[:13], nonce[13:]
-    payload = _jwt_payload(token)
-    sign_str = str(payload["blockId"]) + str(payload["userId"]) + path
-    for c in ts:
-        sign_str += token[int(c)]
-    for c in rnd:
-        sign_str += token[len(token) - 1 - int(c)]
-    return hashlib.md5(sign_str.encode("utf-8")).hexdigest()
-
-
-def _build_headers(url: str, key: str) -> dict:
-    """按次构建请求头，N/S 每次请求重新生成并配套。"""
-    nonce = _gen_nonce()
-    return {
-        "Authorization": f"Bearer {key}",
-        "Content-Type": "application/json; charset=UTF-8",
-        "N": nonce,
-        "S": _gen_sign(nonce, key, urlparse(url).path),
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36",
-    }
+from api_accounts import API_ACCOUNTS, PERIOD
+from api_sign import _build_headers
 
 
 def _print_request(resp: requests.Response) -> None:
@@ -438,8 +395,8 @@ def run_account_tasks(base_url: str, key: str, result_dir: str) -> None:
             "order": "descending",
             "model": {
                 "createDateRange": {
-                    "startDate": "2026-08-01",
-                    "endDate": "2026-08-31",
+                    "startDate": f"{PERIOD}-01",
+                    "endDate": f"{PERIOD}-31",
                     "type": 30,
                 }
             },
@@ -457,6 +414,92 @@ def run_account_tasks(base_url: str, key: str, result_dir: str) -> None:
             group_field="ownerOrganName",
             save_dir=result_dir,
         )
+
+
+def export_voucher_detail(base_url: str, key: str, result_dir: str) -> None:
+    # 查询集团下所有bulkid
+    func_name10 = "/api/organize/bulk/account/list"
+    result = search_not_finished(
+        base_url=base_url,
+        key=key,
+        method="POST",
+        fuc_name=func_name10,
+        json_body={},
+    )
+    bulks = _extract_records(result)
+
+    # 查询账套下科目id
+    func_name11 = "/api/account/subject/list"
+    all_subjects = []
+    for bulk in bulks:
+        bulk_id = bulk.get("id", "")
+        cal_organ_name = bulk.get("calOrganName", "")
+        if not bulk_id:
+            continue
+        try:
+            sub_result = search_not_finished(
+                base_url=base_url,
+                key=key,
+                method="POST",
+                fuc_name=func_name11,
+                json_body={"bulkId": bulk_id},
+            )
+            sub_records = _extract_records(sub_result)
+            for r in sub_records:
+                r["_calOrganName"] = cal_organ_name
+                r["_bulkId"] = bulk_id
+            all_subjects.extend(sub_records)
+            print(f"  {cal_organ_name}(id={bulk_id}): {len(sub_records)} 个科目")
+        except RuntimeError as e:
+            print(f"  {cal_organ_name}(id={bulk_id}) 查询失败: {e}")
+
+    # 查询<库存商品>科目的凭证明细
+    func_name12 = "/api/account/book/accountDetail"
+    stock_subjects = [r for r in all_subjects if r.get("subjectName") == "库存商品"]
+    print(f"库存商品科目: {len(stock_subjects)} 个")
+    all_detail_records = []
+    for sub in stock_subjects:
+        try:
+            account_detail = search_not_finished(
+                base_url=base_url,
+                key=key,
+                method="POST",
+                fuc_name=func_name12,
+                json_body={
+                    "bulkId": sub["_bulkId"],
+                    "beginPeriod": PERIOD,
+                    "endPeriod": PERIOD,
+                    "beginSubjectId": None,
+                    "endSubjectId": None,
+                    "beginSubjectLevel": 1,
+                    "endSubjectLevel": 4,
+                    "assistShow": 0,
+                    "balanceZeroHide": 0,
+                    "balanceZeroAndPeriodZeroHide": 0,
+                    "periodZeroHidePeriodAndYear": 0,
+                    "leafSubjectShow": 0,
+                    "otherSideSubjectShow": 0,
+                    "subjectId": sub.get("id", ""),
+                    "assistSubjectId": None,
+                },
+            )
+            detail_records = _extract_records(account_detail)
+            for r in detail_records:
+                r["_calOrganName"] = sub["_calOrganName"]
+            all_detail_records.extend(detail_records)
+            print(f"  {sub['_calOrganName']}({sub.get('subjectName')}): {len(detail_records)} 条凭证明细")
+        except RuntimeError as e:
+            print(f"  {sub['_calOrganName']}({sub.get('subjectName')}) 查询失败: {e}")
+
+    if all_detail_records:
+        export_result_to_excel(
+            {"data": all_detail_records},
+            fields=["_calOrganName", "subjectCode", "subjectName", "voucherDate", "summary", "debitAmount", "creditAmount", "balanceAmount", "directionName"],
+            fuc_name=func_name12,
+            group_field="_calOrganName",
+            save_dir=result_dir,
+        )
+
 
 def run_download_tasks(base_url: str, key: str, result_dir: str) -> None:
     # 下载系统备份报表
@@ -567,8 +610,9 @@ def main():
         print(f"\n{'=' * 20} 开始处理: {name} ({account['url']}) {'=' * 20}")
         print(f"输出目录: {account_dir}")
         try:
-            run_account_tasks(account["url"], account["key"], account_dir)
-            run_download_tasks(account["url"], account["key"], account_dir)
+            # run_account_tasks(account["url"], account["key"], account_dir)
+            # run_download_tasks(account["url"], account["key"], account_dir)
+            export_voucher_detail(account["url"], account["key"], account_dir)
         except RuntimeError as e:
             # 单个账号失败不影响其他账号继续执行
             print(f"[{name}] 执行失败，已跳过: {e}")
