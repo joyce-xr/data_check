@@ -8,7 +8,7 @@ from urllib.parse import urlparse
 import requests
 from openpyxl import Workbook
 
-from api_accounts import API_ACCOUNTS, PERIOD
+from api_accounts import API_ACCOUNTS, PERIOD, EXPORT_DIR
 from api_sign import _build_headers
 
 
@@ -501,7 +501,7 @@ def export_voucher_detail(base_url: str, key: str, result_dir: str) -> None:
         )
 
 
-def run_download_tasks(base_url: str, key: str, result_dir: str) -> None:
+def run_download_tasks(base_url: str, key: str, result_dir: str, account_name: str = "") -> None:
     # 下载系统备份报表
     func_name9 = "/api/common/export/page"
 
@@ -526,9 +526,10 @@ def run_download_tasks(base_url: str, key: str, result_dir: str) -> None:
         for r in records
         if str(r.get("status")) == "100" and str(r.get("orderDate", "")) == today
     ]
+    safe_name = re.sub(r'[\\/:*?"<>|]', "_", account_name) or "default"
     download_dir = os.path.join(
-        r"D:\data_backup",
-        urlparse(base_url).hostname.split(".")[0],  # 二级域名，如 test
+        EXPORT_DIR,
+        safe_name,  # API_ACCOUNTS 中配置的账号名称
     )
     os.makedirs(download_dir, exist_ok=True)
     saved, failed = 0, 0
@@ -598,20 +599,19 @@ def main():
     log_path = _setup_logger()
     print(f"日志文件: {log_path}")
 
-    result_dir = r"D:\account_check_data"
+    result_dir = EXPORT_DIR
     os.makedirs(result_dir, exist_ok=True)
 
     for account in API_ACCOUNTS:
         name = account.get("name") or account["url"]
-        # 以 API_URL 的二级域名（如 test.aipzm.com -> test）为该账号建立独立输出子目录
-        host = urlparse(account["url"]).hostname or "default"
-        account_dir = os.path.join(result_dir, host.split(".")[0])
+        # 以 API_ACCOUNTS 中配置的账号名称为该账号建立独立输出子目录
+        account_dir = os.path.join(result_dir, name)
         os.makedirs(account_dir, exist_ok=True)
         print(f"\n{'=' * 20} 开始处理: {name} ({account['url']}) {'=' * 20}")
         print(f"输出目录: {account_dir}")
         try:
-            # run_account_tasks(account["url"], account["key"], account_dir)
-            # run_download_tasks(account["url"], account["key"], account_dir)
+            run_account_tasks(account["url"], account["key"], account_dir)
+            run_download_tasks(account["url"], account["key"], account_dir, name)
             export_voucher_detail(account["url"], account["key"], account_dir)
         except RuntimeError as e:
             # 单个账号失败不影响其他账号继续执行

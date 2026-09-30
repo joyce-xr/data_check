@@ -1,4 +1,4 @@
-"""接口请求签名工具：生成 N（nonce）和 S（sign）请求头。"""
+"""》。"""
 
 import base64
 import hashlib
